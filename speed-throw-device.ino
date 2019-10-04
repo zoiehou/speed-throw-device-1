@@ -5,7 +5,7 @@
 // ========= DOT MATRIX SETUP ==========
 #include "MatrixCascade.h" //incl. library file
 
-//Define matrix pins
+// Define matrix pins
 #define clk 10
 #define cs 11
 #define din 12
@@ -20,8 +20,8 @@ uint8_t colsCount = sizeof(cols); //set length to 64
 #define buttonA A1 // USB white (data 2) - red button; wired button
 #define buttonB A2 // USB green (data 1) - green button
 #define buttonGND A3
-#define remoteA 5
-#define remoteB 4
+#define remoteA 4
+#define remoteB 5
 
 // ========= WIRED BUTTON SETUP ==========
 
@@ -226,6 +226,7 @@ void setup()
   sensor1.initialize();
   Serial.println("    Testing device connections...");
   Serial.println(sensor1.testConnection() ? "    MPU6050 #1 connection successful" : "    MPU6050 #1 connection failed");
+  calibrate();
   Serial.println("  Accelerometer Setup Complete");
   // ========== Accelerometer Setup ===========
 
@@ -250,7 +251,7 @@ void setup()
   // ASURE SOLUTIONS scrolling
   while (checkButton() == 0)
   {
-    setText(asure, 75, true);
+    setText(asure, maxCols, true);
   }
 
   menu = true;
@@ -287,7 +288,6 @@ void calibrate()
   ay2avg = ay2avg / 484;
   az2avg = az2avg / 484;
 }
-//Calibrate accelerometers
 
 void loop()
 //the overall rundown from scrolling asure, check for button, select the mode, and to actually start the mode
@@ -333,9 +333,16 @@ void loop()
     // Check if button is pressed again
     button_state = checkButton();
 
-    if (button_state == 2)
+    if (button_state == 2 && mode == 1)
     {
       started = true; // Confirmation button, selected mode starts
+      Serial.print("Mode:");
+      Serial.println(mode);
+    }
+    else if (mode == 0){
+      started = true;
+      Serial.print("Mode:");
+      Serial.println(mode);
     }
   }
 
@@ -344,21 +351,26 @@ void loop()
     // Start at first hit mode
     if (mode == 0)
     {
-      //setText(number_20, 32, false);             //display number 20 on dot matrix
-      sensor1.getAcceleration(&ax1, &ay1, &az1); // get accelerometer information
-
-      // Calculate difference between current accelerometer reading and average value calculated during setup
-      int ax1Diff = ax1 - ax1avg;
-      int ay1Diff = ay1 - ay1avg;
-      int az1Diff = az1 - az1avg;
-
-      if (abs(ax1Diff) > sensitivity || abs(ay1Diff) > sensitivity || abs(az1Diff) > sensitivity)
+      while (true)
       {
-        system_mode(); // use mode A/start with hit function
+        //setText(number_20, 32, false);             //display number 20 on dot matrix
+        sensor1.getAcceleration(&ax1, &ay1, &az1); // get accelerometer information
+
+        // Calculate difference between current accelerometer reading and average value calculated during setup
+        int ax1Diff = ax1 - ax1avg;
+        int ay1Diff = ay1 - ay1avg;
+        int az1Diff = az1 - az1avg;
+
+        if (abs(ax1Diff) > sensitivity || abs(ay1Diff) > sensitivity || abs(az1Diff) > sensitivity)
+        {
+          break; //system_mode()//start with hit function
+        }
       }
+      system_mode();
     }
+
     // Start at beep mode
-    if (mode == 1)
+    else if (mode == 1)
     {
       //setText(number_20, 32, false); //display number 20 on dot matrix
       tone(spkr, start_freq, start_dur); //beep sound with speaker
