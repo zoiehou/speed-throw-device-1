@@ -30,6 +30,12 @@ uint8_t colsCount = sizeof(cols); //set length to 64
 #define spkr 3
 // ========= SPEAKER SETUP ==========
 
+
+// ========= WIRELESS REMOTE SETUP ==========
+#include "SoftwareSerial.h"
+SoftwareSerial MyBlue(7, 8); // RX | TX 
+// ========= WIRELESS REMOTE SETUP ==========
+
 // ========= ACCELEROMETER SETUP ==========
 #include "Wire.h"
 #include "I2Cdev.h"
@@ -46,12 +52,14 @@ int16_t ax2, ay2, az2;
 int16_t gx2, gy2, gz2;
 long ax2avg, ay2avg, az2avg;
 
+int accum = 0;
 bool started = false;                             // Has 20 second timer started?
 bool menu = false;                                // On choosing mode screen?
 int mode = 0;                                     // 0 = Mode A, 1 = Mode B
 int button_state = 0;                             // 0 = no buttons pressed, 1 = A, 2 = B
+int remote_state = 0;                             // 0 = no buttons pressed, 1 = A, 2 = B
 bool strike = false;                              // Has knife stuck the board?
-const int threshold = 25;                         // Button debounce delay
+const int threshold = 1;                         // Button debounce delay
 const int sensitivity = 5000;                     // Set sensitivity of accelerometer
 const uint8_t matrixSize = 8;                     // Width of an individual matrix
 uint8_t offset = 0;                               // Text offset while scrolling
@@ -196,6 +204,7 @@ uint8_t number_20[32] = {
 // Declare functions
 int setText(uint8_t *text, int len, bool scroll);
 int checkButton();
+int checkRemote();
 int system_mode();
 int printTime(int remtime);
 
@@ -209,6 +218,9 @@ void setup()
 {
   //initialize
   Serial.begin(9600);
+
+  MyBlue.begin(9600);  //Baud Rate for AT-command Mode.  
+  Serial.println("**AT commands mode**"); 
 
   // Set the brightness. (0 lowest..15 highest)
   cascade.setIntensity(15);
@@ -249,7 +261,7 @@ void setup()
   // ========== Wireless Button Setup ===========
 
   // ASURE SOLUTIONS scrolling
-  while (checkButton() == 0)
+  while (checkButton() == 0 && checkRemote() == 0)
   {
     setText(asure, maxCols, true);
   }
@@ -292,6 +304,7 @@ void calibrate()
 void loop()
 //the overall rundown from scrolling asure, check for button, select the mode, and to actually start the mode
 {
+  Serial.println(accum);
   if (menu == true)
   {
 
@@ -311,20 +324,21 @@ void loop()
 
     // Check for button press
     button_state = checkButton();
+    remote_state = checkRemote();
 
     // Update mode based on button being pressed
-    switch (button_state)
-    {
-    case 1:
+    if (button_state == 1 || remote_state == 1){
       mode == 0 ? mode = 1 : mode = 0;
-      break; // red/A button is pressed, red button is switching between the menus
-    case 2:
+    }// red/A button is pressed, red button is switching between the menus
+    else if (button_state == 2 || remote_state == 2) {
       menu = false;
-      break; // green/B button is pressed, green button is confirmation
-    default:
-      break;
+    }
+    else {
+      menu = true;
     }
   }
+
+
 
   else if (started == false)
   {
@@ -332,8 +346,9 @@ void loop()
 
     // Check if button is pressed again
     button_state = checkButton();
+    remote_state = checkRemote();
 
-    if (button_state == 2 && mode == 1)
+    if ((button_state == 2 ||remote_state == 2) && mode == 1)
     {
       started = true; // Confirmation button, selected mode starts
       Serial.print("Mode:");
@@ -557,6 +572,28 @@ if (remtime < 0){
   starttime = millis();
   Serial.println(starttime);*/
 
+
+//REMOTE CONTROL
+int checkRemote()
+{
+  byte A = 0;
+  int B = 0;
+ //from bluetooth to Terminal. 
+  if (MyBlue.available()) {
+    A = MyBlue.read();
+ } 
+  if (A == 49){
+    Serial.println("BT: 1 Pressed");
+    B = 1;
+ }
+  else if (A == 50){
+    Serial.println("BT: 2 Pressed");
+    B = 2;
+ }
+  return B;
+}
+
+
 //CHECK BUTTONS
 //  - does not take in any parameters
 //  - returns 1 if red pressed AND/OR remoteA pressed, 2 if green pressed AND/OR remoteB pressed
@@ -564,32 +601,23 @@ if (remtime < 0){
 //  ** RED BUTTON IS buttonA = first button, GREEN BUTTON IS buttonB = second button**
 int checkButton()
 {
-  int accum = 0;
-  byte buttonPressed = 0;
-  while (digitalRead(buttonA) || digitalRead(remoteA) || digitalRead(buttonB) || digitalRead(remoteB))
+  if (digitalRead(buttonA) || digitalRead(buttonB))
   {
     accum++;
-    delay(1);
-    if (accum == 0)
-    {
-      break;
-    }
-    if (digitalRead(buttonA) || digitalRead(remoteA))
-    {
-      buttonPressed = 1;
-    }
-    else if (digitalRead(buttonB) || digitalRead(remoteB))
-    {
-      buttonPressed = 2;
-    }
+    return 0;
   }
-
-  if (accum > threshold)
-  {
-    return buttonPressed;
-  }
-  else
-  {
+  else {
+    if (accum >= threshold){
+      if (digitalRead(buttonA)){
+        accum = 0;
+        return 1;
+      }
+      else {
+        accum = 0;
+        return 2;
+      }
+    }
+    accum = 0;
     return 0;
   }
 }
